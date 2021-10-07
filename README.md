@@ -5,9 +5,8 @@ Sometimes, you have a gigantic folder full of executables, and you want to figur
 importsort will iterate over all of the files in a directory, and create a list containing the DLL name, the function imported, and the file that imported that function. 
 You can use it to analyze possible behavior, such as network functionality or registry key manipulation etc. 
 
-It uses radare2's `rabin2` tool, but you can also use rizin's `rz-bin`. 
-Make sure you have either tool installed, and the `rToolPath` variable in the script is pointing to the correct binary. 
-No special libraries are used, it just calls either tool with the `-j` flag for json output using subprocess, and iterates that way. 
+The initial version of this tool used radare2 or rizin for parsing PE files. The new version relies on the `pefile` library. Install with `python3 -m pip install pefile`.
+This newer version is much faster, and less error prone than the previous version.
 
 ## Usage
 
