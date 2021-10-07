@@ -1,11 +1,10 @@
 import fnmatch
 import os
-import subprocess
 import json
 import argparse
 import sys
+import pefile
 
-rToolPath = "/usr/bin/rabin2" # Change if this is different. Can use both rabin2 and rz-bin
 importDict = {} # The import dict, 
 outLines   = [] # for the final sort
 
@@ -22,33 +21,47 @@ def rGlob(treeroot, pattern):
         results.extend(os.path.join(base, f) for f in goodfiles)
     return results
 
-def getImports(filename):
-    process = subprocess.run(['{} -j -i "{}"'.format(rToolPath,filename)], 
-                           shell=True, check=True, stdout=subprocess.PIPE, 
-                           universal_newlines=True)
-    output = json.loads(process.stdout)
-    return output
-
-def processImports(filej):
-    for i in range(0,len(filej["imports"])):
-        libName = filej["imports"][i]["libname"]
-        fncName = filej["imports"][i]["name"]
-        if libName not in importDict:
-            importDict[libName] = []
-        importDict[libName].append((fncName,infile))
+def getImports(fname):
+    try:
+        myPE = pefile.PE(fname,fast_load=True)
+        myPE.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_IMPORT']])
+        myPE.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT']])
+        if hasattr(myPE,'DIRECTORY_ENTRY_IMPORT'):
+            for entry in myPE.DIRECTORY_ENTRY_IMPORT:
+              for imp in entry.imports:
+                libName = entry.dll.decode('utf-8')
+                if imp.name is not None:
+                    fncName = imp.name.decode('utf-8')
+                elif imp.ordinal is not None:
+                    fncName = "Ordinal_{}".format(imp.ordinal)
+                else:
+                    fncName = "???"
+                if libName not in importDict:
+                    importDict[libName] = []
+                importDict[libName].append((fncName,infile))
+        if hasattr(myPE, 'DIRECTORY_ENTRY_DELAY_IMPORT'):
+          for entry in myPE.DIRECTORY_ENTRY_DELAY_IMPORT:
+            for imp in entry.imports:
+                libName = entry.dll.decode('utf-8')
+                if imp.name is not None:
+                    fncName = imp.name.decode('utf-8')
+                elif imp.ordinal is not None:
+                    fncName = "Ordinal_{}".format(imp.ordinal)
+                else:
+                    fncName = "???"
+                if libName not in importDict:
+                    importDict[libName] = []
+                importDict[libName].append((fncName,infile))
+        sys.stderr.write("[+] {}\n".format(infile))
+    except pefile.PEFormatError:
+        sys.stderr.write("[-] {}\n".format(infile))
 
 if __name__ == '__main__':
     directory = args.directory
     dirlist = rGlob(directory,"*")
     sys.stderr.write("Parsing files in directory...\n")
     for infile in dirlist:
-        outj = getImports(infile)
-        if ( len(outj["imports"]) > 0 ) and ( "libname" in outj["imports"][0] ):
-            sys.stderr.write("[+] {}\n".format(infile))
-            processImports(outj)
-        else:
-            sys.stderr.write("[-] {}\n".format(infile))
-            continue
+        getImports(infile)
     if args.jsonOut:
         print(json.dumps(importDict))
     else:
